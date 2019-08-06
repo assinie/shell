@@ -1,9 +1,108 @@
-MODULE = 'y'
+;MODULE = 'y'
 ;WITH_SDCARD_FOR_ROOT = 'y'
-;LS_VERBOSE = 'y'
+LS_VERBOSE = 'y'
 ;LS_VERBOSE_DATE = 'y'
 ;LS_VERBOSE_ATTRIBUTE = 'y'
 ;LS_VERBOSE_SIZE = 'y'
+
+; ====================================
+
+.ifndef print
+.out "Ajout macro print"
+.macro print str, option
+	;
+	; Call XWSTR0 function
+	;
+	; usage:
+	;	PRINT #byte [,TELEMON|NOSAVE]
+	;	PRINT (pointer) [,TELEMON|NOSAVE]
+	;	PRINT address [,TELEMON|NOSAVE]
+	;
+	; Option:
+	;	- TELEMON: when used within TELEMON bank
+	;	- NOSAVE : does not preserve A,X,Y registers
+	;
+	.if (.not .blank({option})) .and (.not .xmatch({option}, NOSAVE)) .and (.not .xmatch({option}, TELEMON) )
+		.error .sprintf("Unknown option: '%s' (not in [NOSAVE,TELEMON])", .string(option))
+	.endif
+
+	.if (.not .blank({option})) .and .xmatch({option}, NOSAVE)
+		.out "Don't save regs values"
+	.endif
+
+	.if .blank({option})
+		pha
+		txa
+		pha
+		tya
+		pha
+	.endif
+
+	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
+		pha
+		txa
+		pha
+		tya
+		pha
+
+		lda RES
+		pha
+		lda RES+1
+		pha
+	.endif
+
+
+	.if (.match (.left (1, {str}), #))
+		; .out "Immediate mode"
+
+		lda # .right (.tcount ({str})-1, {str})
+		.byte $00, XWR0
+
+	.elseif (.match(.left(1, {str}), {(}) )
+		; Indirect
+		.if (.match(.right(1,{str}), {)}))
+			; .out"Indirect mode"
+
+			lda .mid (1,.tcount ({str})-2, {str})
+			ldy 1+(.mid (1,.tcount ({str})-2, {str}))
+			.byte $00, XWSTR0
+
+		.else
+			.error "-- PRINT: Need ')'"
+		.endif
+
+	.else
+		; assume absolute
+		; .out "Aboslute mode"
+
+		lda #<str
+		ldy #>str
+		.byte $00, XWSTR0
+	.endif
+
+	.if .blank({option})
+		pla
+		tay
+		pla
+		txa
+		pla
+	.endif
+
+	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
+		pla
+		sta RES+1
+		pla
+		sta RES
+
+		pla
+		tay
+		pla
+		txa
+		pla
+	.endif
+
+.endmacro
+.endif
 
 .ifdef MODULE
 	.include "telestrat.inc"
@@ -11,6 +110,7 @@ MODULE = 'y'
 	.include "../dependencies/kernel/src/include/kernel.inc"
 	.include "../dependencies/kernel/src/include/memory.inc"
 	.include "../dependencies/kernel/src/include/process.inc"
+	;.include "../dependencies/kernel/src/include/print.mac"
 
 	.include "../include/bash.inc"
 	.include "../include/orix.inc"
@@ -217,7 +317,38 @@ display_one_file_catalog:
     rts
 
 ; ------------------------------------------------------------------------------
-
+; Entrée du catalogue:
+;   Offset              Description
+;   00-07               Filename
+;   08-0A               Extension
+;   0B                  File attributes
+;                           0x01: Read only
+;                           0x02: Hidden
+;                           0x04: System
+;                           0x08: Volume label
+;                           0x10: Subdirectory
+;                           0x20: Archive
+;                           0x40: Device (internal use only)
+;                           0x80: Unused
+;   0C                  Reserved
+;   0D                  Create time: fine resolution (10ms) 0 -> 199
+;   0E-0F               Create time: Hour, minute, second
+;                            bits
+;                           15-11: Hour  (0-23)
+;                           10- 5: Minutes (0-59)
+;                            4- 0: Seconds/2 (0-29)
+;   10-11               Create time:Year, month, day
+;                            bits
+;                           15- 9: Year (0->1980, 127->2107)
+;                            8- 5: Month (1->Jan, 12->Dec)
+;                            4- 0: Day (1-31)
+;   12-13               Last access date
+;   14-15               EA index
+;   16-17               Last modified time
+;   18-19               Last modified date
+;   1A-1B               First cluster
+;   1C-1F               File size
+; ------------------------------------------------------------------------------
 display_catalog:
     lda #COLOR_FOR_FILES
     sta BUFNOM
@@ -273,9 +404,9 @@ display_catalog:
     bne @ZZ0016
 
     ; Attention XCRLF modifie RES
-; [HCL]
-; Pas de saut de ligne, on est déjà au dernier caractère
-; (UNIQUEMENT POUR LA VERSION LONGUE AVEC AFFICHAGE DE L'ATTRIBUT)
+    ; [HCL]
+    ; Pas de saut de ligne, on est déjà au dernier caractère
+    ; (UNIQUEMENT POUR LA VERSION LONGUE AVEC AFFICHAGE DE L'ATTRIBUT)
     BRK_ORIX XCRLF
 
     lda #NUMBER_OF_COLUMNS_LS
@@ -286,7 +417,8 @@ display_catalog:
 .else
     ; Affiche l'attribut
     lda TR0
-    jsr Hex2Dec
+    ; jsr PrintHexByte
+    jsr PrintFileAttr
 .endif
 
     ; PRINT BUFNOM
@@ -311,7 +443,8 @@ display_catalog:
     bne @suite
 
     pha
-    CPUTC '.'
+;    CPUTC '.'
+    print #'.', NOSAVE
     pla
     inx
 
@@ -336,7 +469,8 @@ display_catalog:
     beq @ZZ0018
 
     inx
-    CPUTC ' '
+;    CPUTC ' '
+    print #' ', NOSAVE
     jmp @ZZ0017
 
   @ZZ0018:
@@ -385,7 +519,7 @@ optstring:
 
 .endproc
 
-; ==============================================================================
+; ------------------------------------------------------------------------------
 ;
 ; Entrée:
 ;    RES: Pointeur vers la chaîne
@@ -400,6 +534,7 @@ optstring:
 ;
 ; Prepare le buffer: "????????.???"
 ;
+; ------------------------------------------------------------------------------
 .proc WildCard
     lda #'?'
     ldy #$0B-1
@@ -528,6 +663,9 @@ ExtensionFin:
 
     rts
 
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
 Erreur4:
     ; Extension trop longue
     lda #$04
@@ -552,6 +690,9 @@ Erreur:
     ;sec
     rts
 
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
 Star:
     ldx #$0c-1
   @loop:
@@ -630,6 +771,7 @@ ExtensionOk:
 
 .endproc
 
+; ------------------------------------------------------------------------------
 ;
 ; Entrée:
 ;    TR2 : Chaine
@@ -643,6 +785,7 @@ ExtensionOk:
 ; Note: ne vérifie pas si la longueur de la chaîne est > à celle du masque
 ;       - RES ne peut être utilisé à la place de TR2 (le XCRLF modifie RES)
 ;
+; ------------------------------------------------------------------------------
 .proc Match
     ldy #$ff
 
@@ -673,7 +816,7 @@ ExtensionOk:
     rts
 .endproc
 
-; ==============================================================================
+; ------------------------------------------------------------------------------
 ; Affichage Date & Heure
 ;
 ; Buffer:
@@ -689,6 +832,7 @@ ExtensionOk:
 ;    TR0-TR1 (directement)
 ;    TR4-TR6 (indirectement, via Bin2BCD)
 ;
+; ------------------------------------------------------------------------------
 Date:
 ;   CPUTC ' '
     CPUTC ' '
@@ -715,7 +859,8 @@ Date:
     ldx #$10
     jsr Bin2BCD
 
-    CPUTC '-'
+;    CPUTC '-'
+    print #'-', NOSAVE
 
 ;    lda #$00
 ;    sta TR1
@@ -731,15 +876,18 @@ Date:
 
     jsr Bin2BCD
 
-    CPUTC '-'
+;    CPUTC '-'
+    print #'-', NOSAVE
 
 ;    ldy #$0c
     lda BUFEDT+13,y
     and #$1f
     jsr Bin2BCD
 
-    CPUTC ' '
-    CPUTC ' '
+;    CPUTC ' '
+;    CPUTC ' '
+    print #' ', NOSAVE
+    print #' ', NOSAVE
 
     lda BUFEDT+12,y
     lsr
@@ -747,7 +895,8 @@ Date:
     lsr
     jsr Bin2BCD
 
-    CPUTC ':'
+;    CPUTC ':'
+    print #':', NOSAVE
     lda BUFEDT+12,y
     and #$07
     sta TR1
@@ -766,11 +915,15 @@ Date:
 ; Nécessaire uniquement pour afficher les secondes
 ;    jsr Bin2BCD
 ;
-;    CPUTC ':'
+;;    CPUTC ':'
+;    print #':', NOSAVE
 ;    lda BUFEDT+12,y
 ;    and #$1f
 ;    asl
 
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
 Bin2BCD:
     ; Entrée:
     ;    TR0-TR1: Valeur binaire
@@ -811,128 +964,63 @@ Bin2BCD:
 
     lda TR6
     beq *+5
-    jsr Hex2Dec
+    jsr PrintHexByte
     lda TR5
     beq *+5
-    jsr Hex2Dec
+    jsr PrintHexByte
     lda TR4
 
-Hex2Dec:
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
+PrintHexByte:
     pha
+
+    ; High nibble
     lsr
     lsr
     lsr
     lsr
     jsr Hex2Asc
+
+    ;Low nibble
     pla
     and #$0f
+
 Hex2Asc:
     ora #$30
     cmp #$3a
     bcc *+4
-    adc #$05
+    adc #$06
     BRK_TELEMON XWR0
     rts
 
 
-; ====================================
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
+PrintFileAttr:
+    pha
+    and #$10
+    beq @attr_nodir
+    lda #'d'
+    .byte $2c
+  @attr_nodir:
+    lda #'-'
+    BRK_ORIX XWR0
+    pla
+    lsr
+    bcc @attr_rw
+    lda #'r'
+    .byte $2c
+  @attr_rw:
+    lda #'-'
+    BRK_ORIX XWR0
+    rts
 
-.ifndef print
-.macro print str, option
-	;
-	; Call XWSTR0 function
-	;
-	; usage:
-	;	PRINT #byte [,TELEMON|NOSAVE]
-	;	PRINT (pointer) [,TELEMON|NOSAVE]
-	;	PRINT address [,TELEMON|NOSAVE]
-	;
-	; Option:
-	;	- TELEMON: when used within TELEMON bank
-	;	- NOSAVE : does not preserve A,X,Y registers
-	;
-	.if (.not .blank({option})) .and (.not .xmatch({option}, NOSAVE)) .and (.not .xmatch({option}, TELEMON) )
-		.error .sprintf("Unknown option: '%s' (not in [NOSAVE,TELEMON])", .string(option))
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, NOSAVE)
-		.out "Don't save regs values"
-	.endif
-
-	.if .blank({option})
-		pha
-		txa
-		pha
-		tya
-		pha
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
-		pha
-		txa
-		pha
-		tya
-		pha
-
-		lda RES
-		pha
-		lda RES+1
-		pha
-	.endif
-
-
-	.if (.match (.left (1, {str}), #))
-		; .out "Immediate mode"
-
-		lda # .right (.tcount ({str})-1, {str})
-		.byte $00, XWR0
-
-	.elseif (.match(.left(1, {str}), {(}) )
-		; Indirect
-		.if (.match(.right(1,{str}), {)}))
-			; .out"Indirect mode"
-
-			lda .mid (1,.tcount ({str})-2, {str})
-			ldy 1+(.mid (1,.tcount ({str})-2, {str}))
-			.byte $00, XWSTR0
-
-		.else
-			.error "-- PRINT: Need ')'"
-		.endif
-
-	.else
-		; assume absolute
-		; .out "Aboslute mode"
-
-		lda #<str
-		ldy #>str
-		.byte $00, XWSTR0
-	.endif
-
-	.if .blank({option})
-		pla
-		tay
-		pla
-		txa
-		pla
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
-		pla
-		sta RES+1
-		pla
-		sta RES
-
-		pla
-		tay
-		pla
-		txa
-		pla
-	.endif
-
-.endmacro
-.endif
-
+; ------------------------------------------------------------------------------
+;
+; ------------------------------------------------------------------------------
 .proc DisplaySize
 ;    CPUTC ' '
     ; Encre blanche
@@ -997,6 +1085,8 @@ LSB  = RES
 NLSB = LSB+1
 NMSB = NLSB+1
 MSB  = NMSB+1
+
+; ------------------------------------------------------------------------------
 ;
 ; Entrée:
 ;    RES-RESB: Valeur binaire
@@ -1004,6 +1094,9 @@ MSB  = NMSB+1
 ; Sortie:
 ;    TR0-TR4: Valeur en BCD
 ;
+; ------------------------------------------------------------------------------
+BCDA = (TR0-$FB) & $ff ; = $0C
+
 .proc convd
         ldx #$04          ; Clear BCD accumulator
         lda #$00
@@ -1034,9 +1127,8 @@ MSB  = NMSB+1
 ;    dex
 ;    bne BRO
 
+;-------
 ; Pour LSB en premier dans BCDA
-
-BCDA = (TR0-$FB) & $ff ; = $0C
 
         ldx #$fb          ; X will control a five byte addition.
 
@@ -1054,18 +1146,20 @@ BCDA = (TR0-$FB) & $ff ; = $0C
         rts               ; And back to the program.
 .endproc
 
+; ------------------------------------------------------------------------------
 ;
 ; Entrée:
-;    RES: Adresse de la chaine
+;    RES: Adresse de la chaine (AY)
 ;    TR0-TR4: Valeur en BCD
 ;
+; ------------------------------------------------------------------------------
 .proc bcd2str
 	sta RES
 	sty RES+1
 
 	ldx #$04          ; Nombre d'octets à convertir
 	ldy #$00
-	clc
+;	clc
 
 @loop:
 	; BCDA: LSB en premier
@@ -1076,12 +1170,13 @@ BCDA = (TR0-$FB) & $ff ; = $0C
 	lsr
 	lsr
 	lsr
-	adc #'0'
+;	clc
+	ora #'0'
 	sta (RES),Y
 
 	pla
 	and #$0f
-	adc #'0'
+	ora #'0'
 	iny
 	sta (RES),y
 
@@ -1091,8 +1186,9 @@ BCDA = (TR0-$FB) & $ff ; = $0C
 
 	lda #$00
 	sta (RES),y
+	; lda RES
+	; ldy RES+1
 	rts
-
 .endproc
 
 EndOfModule:
