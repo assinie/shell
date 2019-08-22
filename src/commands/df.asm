@@ -132,7 +132,7 @@ MSB  = NMSB+1
 		sty userzp+1
 
 		jsr bcd2str
-		print (userzp),NOSAVE
+		;jsr display_size
 		print #' '
 
 		lda TR4
@@ -149,7 +149,7 @@ MSB  = NMSB+1
 		ldy userzp+1
 		jsr bcd2str
 
-		print (userzp),NOSAVE
+		;jsr display_size
 
 		FREE userzp
 
@@ -242,6 +242,45 @@ loop:
 	lda #$00
 	sta (RES),y
 	rts
+
+.proc display_size
+    ; Remplace les '0' non significatifs par des ' '
+    ldy #$ff
+    ldx #' '
+  @skip:
+    iny
+    cpy #$09
+    beq @display
+    lda (RES),y
+    cmp #'0'
+    bne @display
+    txa
+    sta (RES),y
+    bne @skip
+
+  @display:
+    ; On saute les espaces du début
+;    clc
+;    tya
+;    adc RES
+;    sta RES
+;    bcc *+4
+;    inc RES+1
+
+     ; La chaine fait 10 caractères
+     ; Taille maximale: < 999 999
+     ; donc on saute les 4 premiers caractères
+    clc
+    lda #$04
+    adc RES
+    sta RES
+    bcc *+4
+    inc RES+1
+
+    print (RES),NOSAVE
+
+    rts
+.endproc
 
 
 str_df_columns:
