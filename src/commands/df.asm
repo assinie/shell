@@ -1,249 +1,190 @@
-; Conversion: 4484 cycles
-LSB  = RES
-NLSB = LSB+1
-NMSB = NLSB+1
-MSB  = NMSB+1
+; vim: set ft=asm6502-2 ts=8:
 
+; Conversion: 4484 cycles
+;LSB  = RES
+;NLSB = LSB+1
+;NMSB = NLSB+1
+;MSB  = NMSB+1
+
+;----------------------------------------------------------------------
+;				Defines
+;----------------------------------------------------------------------
+;.ifdef WITH_SDCARD_FOR_ROOT
+;		        "512-blocks Used Avail. Use% Mounted on"
+	.define df_msg  "xxxxxxxxxx xxxxxxxxxx  xxx   /dev/"
+;.else
+;		        "512-blocks Used Avail. Use% Mounted on"
+;	.define df_msg  "xxxxxxxxxx xxxxxxxxxx  xxx   /dev/"
+;.endif
 
 ;----------------------------------------------------------------------
 ;				Macros
 ;----------------------------------------------------------------------
-.macro print str, option
-	;
-	; Call XWSTR0 function
-	;
-	; usage:
-	;	PRINT #byte [,TELEMON|NOSAVE]
-	;	PRINT (pointer) [,TELEMON|NOSAVE]
-	;	PRINT address [,TELEMON|NOSAVE]
-	;
-	; Option:
-	;	- TELEMON: when used within TELEMON bank
-	;	- NOSAVE : does not preserve A,X,Y registers
-	;
-	.if (.not .blank({option})) .and (.not .xmatch({option}, NOSAVE)) .and (.not .xmatch({option}, TELEMON) )
-		.error .sprintf("Unknown option: '%s' (not in [NOSAVE,TELEMON])", .string(option))
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, NOSAVE)
-		.out "Don't save regs values"
-	.endif
-
-	.if .blank({option})
-		pha
-		txa
-		pha
-		tya
-		pha
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
-		pha
-		txa
-		pha
-		tya
-		pha
-
-		lda RES
-		pha
-		lda RES+1
-		pha
-	.endif
-
-
-	.if (.match (.left (1, {str}), #))
-		; .out "Immediate mode"
-
-		lda # .right (.tcount ({str})-1, {str})
-		.byte $00, XWR0
-
-	.elseif (.match(.left(1, {str}), {(}) )
-		; Indirect
-		.if (.match(.right(1,{str}), {)}))
-			; .out"Indirect mode"
-
-			lda .mid (1,.tcount ({str})-2, {str})
-			ldy 1+(.mid (1,.tcount ({str})-2, {str}))
-			.byte $00, XWSTR0
-
-		.else
-			.error "-- PRINT: Need ')'"
-		.endif
-
-	.else
-		; assume absolute
-		; .out "Aboslute mode"
-
-		lda #<str
-		ldy #>str
-		.byte $00, XWSTR0
-	.endif
-
-	.if .blank({option})
-		pla
-		tay
-		pla
-		txa
-		pla
-	.endif
-
-	.if (.not .blank({option})) .and .xmatch({option}, TELEMON)
-		pla
-		sta RES+1
-		pla
-		sta RES
-
-		pla
-		tay
-		pla
-		txa
-		pla
-	.endif
-
-.endmacro
 
 ;----------------------------------------------------------------------
 ;				Command
 ;----------------------------------------------------------------------
 .proc _df
-	jsr _ch376_verify_SetUsbPort_Mount
-	;bcc @ZZ0001
-	bcs *+5
-	jmp @ZZ0001
+;	jsr _ch376_verify_SetUsbPort_Mount
+;	;bcc @ZZ0001
+;	bcs *+5
+;	jmp df_end
 
-		print str_df_columns
-		jsr   _ch376_disk_capacity
+	; Force le montage du périphérique, sinon un changement avec la
+	; commande twil directement suivie par df indique les valeurs du
+	; périphériques précédent (il faut exécuter une commande qui utilise
+	; le périphérique avant de faire df)
+	jsr _cd_to_current_realpath_new
 
-		lda TR0
-		sta RES
-		lda TR1
-		sta RES+1
-		lda TR2
-		sta RESB
-		lda TR3
-		sta RESB+1
-		jsr convd
+	;lda #<( .strlen(df_msg))
+	;ldy #>(.strlen(df_msg))
+	;.byte $00, XMALLOC
+	malloc .strlen(df_msg)+1, userzp
+	; FIXME test OOM
+	;TEST_OOM_AND_MAX_MALLOC
+	;sta userzp
+	;sty userzp+1
 
-		MALLOC 11
-		; FIXME test OOM
-		TEST_OOM_AND_MAX_MALLOC
+	;ora userzp+1
+	;bne df_suite
+	;jmp df_end
 
-		sta userzp
-		sty userzp+1
+df_suite:
+	strcpy AY, str_df_values
+;	sta RESB
+;	sty RESB+1
+;	lda #<str_sda1
+;	ldy #>str_sda1
+;	sta RES
+;	sty RES+1
+;	jsr _strcpy
 
-		jsr bcd2str
-		;jsr display_size
-		print #' '
+	print df_header
+	jsr   _ch376_disk_query
 
-		lda TR4
-		sta RES
-		lda TR5
-		sta RES+1
-		lda TR6
-		sta RESB
-		lda TR7
-		sta RESB+1
-		jsr convd
+	; Sauvegarde l'espace dispo pour plus tard
+	; (XWSTR0 utilise TRx)
+	;Conversion en blocs de 1k de l'espace libre
+	lsr TR7
+	ror TR6
+	ror TR5
+	ror TR4
 
-		lda userzp
-		ldy userzp+1
-		jsr bcd2str
+	; Sauvegarde l'espace dispo pour plus tard
+	; (XWSTR0 utilise TRx)
+	lda TR4
+	sta userzp+2
+	lda TR5
+	sta userzp+3
+	lda TR6
+	sta userzp+4
+	lda TR7
+	sta userzp+5
 
-		;jsr display_size
+	; Conversion en blocs de 1k de l'espace total
+	lsr TR3
+	ror TR2
+	ror TR1
+	ror TR0
 
-		FREE userzp
+	lda TR0
+	sta RES
+	lda TR1
+	sta RES+1
+	lda TR2
+	sta RESB
+	lda TR3
+	sta RESB+1
 
-	@ZZ0001:
+	jsr convd
+
+;	clc
+	lda userzp
+;	adc #$04
+	ldy userzp+1
+;	bcc *+3
+;	iny
+	jsr bcd2str
+	; Remplace le caractère nul par un ' '
+	lda #' '
+	sta (RES),y
+
+	jsr display_size
+	;print (RES)
+
+	lda userzp+2
+	sta RES
+	lda userzp+3
+	sta RES+1
+	lda userzp+4
+	sta RESB
+	lda userzp+5
+	sta RESB+1
+	jsr convd
+
+	clc
+	lda userzp
+	adc #$0b
+	ldy userzp+1
+	bcc *+3
+	iny
+	jsr bcd2str
+	; Remplace le caractère nul par un ' '
+	lda #' '
+	sta (RES),y
+
+	jsr display_size
+
+	print (userzp)
+
+	;lda userzp
+	;ldy userzp+1
+	;.byte $00, XFREE
+	mfree (userzp)
+
+	; Récupère le périphérique de root
+	ldx #XVARS_KERNEL_CH376_MOUNT
+	BRK_KERNEL XVARS
+	sta userzp
+	sty userzp+1
+	ldy #$00
+	lda (userzp),y
+
+	tax
+	lda #<str_sda1
+	ldy #>str_sda1
+	; SDCARD?
+	cpx #$03
+	beq print_device
+	lda #<str_usb1
+	ldy #>str_usb1
+print_device:
+	BRK_KERNEL XWSTR0
+
+	; SDCARD?
+;	cmp #$03
+;	bne usb
+;	lda #<str_sda1
+;	ldy #>str_sda1
+;	bne xxx
+;	lda #<str_usb1
+;	ldy #>str_usb1
+;print_device:
+;	BRK_KERNEL XWSTR0
+
+
+
+	;ZZ0001:
+df_end:
 	BRK_ORIX XCRLF
 	rts
 
 
+;----------------------------------------------------------------------
+;		Suppression des '0' non significatifs
+;----------------------------------------------------------------------
 
-    convd:
-        ldx #$04          ; Clear BCD accumulator
-        lda #$00
-
-    BRM:
-        sta TR0,x        ; Zeros into BCD accumulator
-        dex
-        bpl BRM
-
-        sed               ; Decimal mode for add.
-
-        ldy #$20          ; Y has number of bits to be converted
-
-    BRN:
-        asl LSB           ; Rotate binary number into carry
-        rol NLSB
-        rol NMSB
-        rol MSB
-
-;-------
-; Pour MSB en premier dans BCDA
-;    ldx #$05
-;
-;BRO:
-;    lda BCDA-1,X
-;    adc BCDA-1,X
-;    sta BCDA-1,x
-;    dex
-;    bne BRO
-
-; Pour LSB en premier dans BCDA
-
-BCDA = (TR0-$FB) & $ff ; = $0C
-
-        ldx #$fb          ; X will control a five byte addition.
-
-    BRO:
-        lda BCDA,x    ; Get least-signficant byte of the BCD accumulator
-        adc BCDA,x    ; Add it to itself, then store.
-        sta BCDA,x
-        inx               ; Repeat until five byte have been added
-        bne BRO
-
-        dey               ; et another bit rom the binary number.
-        bne BRN
-
-        cld               ; Back to binary mode.
-        rts               ; And back to the program.
-
-bcd2str:
-	sta RES
-	sty RES+1
-
-	ldx #$04          ; Nombre d'octets à convertir
-	ldy #$00
-;	clc
-
-loop:
-	; BCDA: LSB en premier
-	lda TR0,X
-	pha
-	; and #$f0
-	lsr
-	lsr
-	lsr
-	lsr
-        clc
-	adc #'0'
-	sta (RES),Y
-
-	pla
-	and #$0f
-	adc #'0'
-	iny
-	sta (RES),y
-
-	iny
-	dex
-	bpl loop
-
-	lda #$00
-	sta (RES),y
-	rts
-
-.proc display_size
+display_size:
     ; Remplace les '0' non significatifs par des ' '
     ldy #$ff
     ldx #' '
@@ -267,9 +208,18 @@ loop:
 ;    bcc *+4
 ;    inc RES+1
 
+; Résultat dans AY
+;    clc
+;    tya
+;    adc RES
+;    ldy RES+1
+;    bcc *+3
+;    iny
+
      ; La chaine fait 10 caractères
      ; Taille maximale: < 999 999
      ; donc on saute les 4 premiers caractères
+.if 0
     clc
     lda #$04
     adc RES
@@ -277,34 +227,130 @@ loop:
     bcc *+4
     inc RES+1
 
-    print (RES),NOSAVE
+; Résultat dans AY
+;    clc
+;    lda #$04
+;    adc RES
+;    ldy RES+1
+;    bcc *+3
+;    iny
+.endif
+    ; print (RES),NOSAVE
 
     rts
-.endproc
 
 
-str_df_columns:
-    .byte "512-blocks Used Avail. Use% Mounted on",$0d,$0A,0
+;----------------------------------------------------------------------
+;				DATA
+;----------------------------------------------------------------------
+df_header:
+    .byte   "512-blocks Used Avail. Use% Mounted on",$0d,$0A,0
+
+str_df_values:
+    .asciiz df_msg
 
 str_sda1:
-    .asciiz "/dev/sda1"
+    .asciiz "sda1"
+
+str_usb1:
+    .asciiz "usb1"
 
 .endproc
 
-; ------------------
-; Temporaire, pour tests
-;RES = *
 
-;LSB = RES
 
-;	.byte  $d2, $02, $96, $00
 
-; Temporaire, pour tests
-;TR0 = *
+.if 0
+; Dans _ls
+;----------------------------------------------------------------------
+;			Conversion binaire -> BCD
+;----------------------------------------------------------------------
+    convd:
+	ldx #$04	  ; Clear BCD accumulator
+	lda #$00
 
-;BCDA = TR0
-;	.res 5
+    BRM:
+	sta TR0,x	; Zeros into BCD accumulator
+	dex
+	bpl BRM
 
-;str:
-;	.res 11
+	sed	       ; Decimal mode for add.
+
+	ldy #$20	  ; Y has number of bits to be converted
+
+    BRN:
+	asl LSB	   ; Rotate binary number into carry
+	rol NLSB
+	rol NMSB
+	rol MSB
+
+;-------
+; Pour MSB en premier dans BCDA
+;    ldx #$05
+;
+;BRO:
+;    lda BCDA-1,X
+;    adc BCDA-1,X
+;    sta BCDA-1,x
+;    dex
+;    bne BRO
+
+; Pour LSB en premier dans BCDA
+
+BCDA = (TR0-$FB) & $ff ; = $0C
+
+	ldx #$fb	  ; X will control a five byte addition.
+
+    BRO:
+	lda BCDA,x    ; Get least-signficant byte of the BCD accumulator
+	adc BCDA,x    ; Add it to itself, then store.
+	sta BCDA,x
+	inx	       ; Repeat until five byte have been added
+	bne BRO
+
+	dey	       ; et another bit rom the binary number.
+	bne BRN
+
+	cld	       ; Back to binary mode.
+	rts	       ; And back to the program.
+
+;----------------------------------------------------------------------
+;			Conversion BCD -> String
+;----------------------------------------------------------------------
+
+bcd2str:
+	sta RES
+	sty RES+1
+
+	ldx #$04	  ; Nombre d'octets à convertir
+	ldy #$00
+;	clc
+
+loop:
+	; BCDA: LSB en premier
+	lda TR0,X
+	pha
+	; and #$f0
+	lsr
+	lsr
+	lsr
+	lsr
+	clc
+	adc #'0'
+	sta (RES),Y
+
+	pla
+	and #$0f
+	adc #'0'
+	iny
+	sta (RES),y
+
+	iny
+	dex
+	bpl loop
+
+	lda #$00
+	sta (RES),y
+	rts
+.endif
 
