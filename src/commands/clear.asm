@@ -1,7 +1,11 @@
+.export _clear
+
+.import _clrscr
+
 .proc _clear
 	; Use FILLM instead or CLS FIXME
-	BRK_ORIX XHIRES ; Hires
-	BRK_ORIX XTEXT  ; and text
-	BRK_ORIX XSCRNE
+	BRK_KERNEL XHIRES ; Hires
+	BRK_KERNEL XTEXT  ; and text
+	BRK_KERNEL XSCRNE
 	rts
 .endproc

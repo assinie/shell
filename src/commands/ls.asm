@@ -188,62 +188,72 @@ LS_VERBOSE = 'y'
 	NUMBER_OF_COLUMNS_LS = 3
 .endif
 
+ls_number_of_columns     := userzp
+ls_save_line_command_ptr := userzp+1 ; 2 bytes
+
+.struct ls_command_struct
+.endstruct
+
 .proc _ls
-    lda #NUMBER_OF_COLUMNS_LS+1
-    sta NUMBER_OF_COLUMNS
 
-    jsr _ch376_verify_SetUsbPort_Mount
+
+    lda     #NUMBER_OF_COLUMNS_LS+1
+    sta     ls_number_of_columns
+
+    jsr     _ch376_verify_SetUsbPort_Mount
     ;bcc @ZZ0001
-    bcs *+5
-    jmp @ZZ0001
+    bcs     *+5
+    jmp     @ZZ0001
 
-    jsr _cd_to_current_realpath_new
-    ldx #$01
-    jsr _orix_get_opt
+    jsr     _cd_to_current_realpath_new
+    ldx     #$01
+    jsr     _orix_get_opt
 
     ; Potentiel buffer overflow ici
     ; Il faudrait un STRNCPY
     STRCPY ORIX_ARGV, BUFNOM
 
-    ;MALLOC 13
-    ; FIXME test OOM
-    ;TEST_OOM_AND_MAX_MALLOC
-    ;sta RESB
-    ;sty RESB+1
 
-    lda #<BUFEDT
-    sta RESB
-    lda #>BUFEDT
-    sta RESB+1
+    lda     bash_struct_command_line_ptr ; $61E
+    sta     RESB
+
+
+    
+    lda     bash_struct_command_line_ptr+1
+    sta     RESB+1
+
 
     ; Potentiel buffer overflow ici
     ; Il faudrait un STRNCPY
-    lda #<BUFNOM
-    ldy #>BUFNOM
-    sta TR2         ; TR2: Cf Match
-    sty TR3
-    sta RES
-    sty RES+1
-    jsr _strcpy
+    lda     #<BUFNOM
+    ldy     #>BUFNOM
+    sta     ls_save_line_command_ptr         ; ls_save_line_command_ptr: Cf Match
+    sty     ls_save_line_command_ptr+1
+    sta     RES
+    sty     RES+1
+    jsr     _strcpy
 
-    ; RESB pointe toujours sur BUFEDT
-    jsr WildCard
-    bne Error       ; Il faut une autre erreur, ici c'est parce qu'il y a des caractères incorrects
+    ; RESB pointe toujours sur le buffer de command line
+    jsr     WildCard
+    bne     Error       ; Il faut une autre erreur, ici c'est parce qu'il y a des caractères incorrects
     ;bcc @ZZ0002     ; Pas de '?' ni de '*'
-    bcs @all
+    bcs     @all
 
-    lda BUFNOM
-    bne @ZZ0002
+    lda     BUFNOM
+    bne     @ZZ0002
 
   @all:
-    lda #'*'
-    sta BUFNOM
-    lda #$00
-    sta BUFNOM+1
+    lda     #'*'
+    sta     BUFNOM
+    lda     #$00
+    sta     BUFNOM+1
 
   @ZZ0002:
-    jsr _ch376_set_file_name
-    jsr _ch376_file_open
+
+    jsr     _ch376_set_file_name
+
+    jsr     _ch376_file_open
+
     ; Au retour, on peut avoir USB_INT_SUCCESS ou USB_INT_DISK_READ)
 
     ; $14 -> Fichier existant (USB_INT_SUCCESS) (cas 'ls fichie.ext')
@@ -251,69 +261,77 @@ LS_VERBOSE = 'y'
     ; $41 -> Fin de liste (ERR_OPEN_DIR) ou ouverture répertoire (cas 'ls repertoire')
     ; $42 -> fichier inexistant (ERR_MISS_FILE)
 
-    cmp #CH376_ERR_MISS_FILE
-    beq Error
+    cmp     #CH376_ERR_MISS_FILE
+    beq     Error
 
     ; Ajuste le pointeur vers BUFNOM pour plus tard
     ; (le 1er caractère contient la couleur)
-    inc TR2
-    bne *+4
-    inc TR3
+    inc     ls_save_line_command_ptr
+    bne     *+4
+    inc     ls_save_line_command_ptr+1
 
   @ZZ1001:
-    cmp #CH376_USB_INT_SUCCESS
-    bne @ZZ1002
-    lda #COLOR_FOR_FILES
-    bne display_one_file_catalog
+    cmp     #CH376_USB_INT_SUCCESS
+    bne     @ZZ1002
+    lda     #COLOR_FOR_FILES
+    bne     display_one_file_catalog
 
   @ZZ1002:
-    cmp #CH376_ERR_OPEN_DIR
-    bne @ZZ0003
-    lda #COLOR_FOR_DIRECTORY
-    bne display_one_file_catalog
+    cmp     #CH376_ERR_OPEN_DIR
+    bne     @ZZ0003
+    lda     #COLOR_FOR_DIRECTORY
+    bne     display_one_file_catalog
 
   @ZZ0003:
-    cmp #CH376_USB_INT_DISK_READ
-    bne @ZZ0004
+    cmp     #CH376_USB_INT_DISK_READ
+    bne     @ZZ0004
 
+<<<<<<< HEAD
     lda #CH376_RD_USB_DATA0
     sta CH376_COMMAND
     lda CH376_DATA
     cmp #$20
     beq @ZZ0005
+=======
+    lda     #CH376_RD_USB_DATA0
+    sta     CH376_COMMAND
+    lda     CH376_DATA
+    cmp     #32  ; is it space ?
+    beq     @ZZ0005
+>>>>>>> origin/master
 
     ;FREE RESB
     rts
 
   @ZZ0005:
-    jsr display_catalog
+    jsr     display_catalog
 
     ; display_one_file_catalog renvoie la valeur de _ch376_wait_response qui renvoie 1 en cas d'erreur
     ; et le CH376 ne renvoie pas de valeur 0
     ; donc le bne devient un saut inconditionnel!
     ; jmp @ZZ0003
-    bne @ZZ0003
+    bne     @ZZ0003
 
   @ZZ0004:
     ;FREE RESB
 
-    BRK_ORIX XCRLF
+    BRK_KERNEL XCRLF
 
   @ZZ0001:
     rts
 
 ; ------------------------------------------------------------------------------
 Error:
-    PRINT txt_file_not_found
-    .BYTE $2C
+    PRINT    txt_file_not_found
+    .BYTE    $2C
 
 display_one_file_catalog:
-    .BYTE $00, XWR0
+    .BYTE    $00, XWR0
 
     ;FREE RESB
 
-    PRINT BUFNOM
-    BRK_ORIX XCRLF
+    PRINT    BUFNOM
+    BRK_KERNEL XCRLF
     rts
 
 ; ------------------------------------------------------------------------------
@@ -350,17 +368,18 @@ display_one_file_catalog:
 ;   1C-1F               File size
 ; ------------------------------------------------------------------------------
 display_catalog:
-    lda #COLOR_FOR_FILES
-    sta BUFNOM
-    ldy #$01
+    lda     #COLOR_FOR_FILES
+    sta     BUFNOM
+    ldy     #$01
 
   @ZZ0007:
-    lda CH376_DATA
-    sta BUFNOM,y
+    lda     CH376_DATA
+    sta     BUFNOM,y
     iny
-    cpy #12
-    bne @ZZ0007
+    cpy     #12
+    bne     @ZZ0007
 
+<<<<<<< HEAD
     lda CH376_DATA
     sta TR0         ; Sauvegarde l'attribut pour plus tard
 ;    cmp #$10
@@ -373,32 +392,46 @@ display_catalog:
 ;    clc
 ;    adc #$40
     sta BUFNOM
+=======
+    lda     CH376_DATA
+    cmp     #$10
+    bne     @ZZ0012
+    lda     #COLOR_FOR_DIRECTORY
+    sta     BUFNOM
+>>>>>>> origin/master
 
   @ZZ0012:
-    lda #$00
-    sta BUFNOM,Y
-    ;sty TEMP_ORIX_1
+    lda     #$00
+    sta     BUFNOM,Y
 
+<<<<<<< HEAD
     ldx #$14
 
   @ZZ0013:
     lda CH376_DATA
     sta BUFEDT+1,y
     iny
+=======
+    ldx     #20
+
+  @ZZ0013:
+    lda     CH376_DATA
+>>>>>>> origin/master
     dex
-    bpl @ZZ0013
+    bpl     @ZZ0013
 
-    jsr Match
-    bne @ZZ0014
+    jsr     Match
+    bne     @ZZ0014
 
-    lda BUFNOM
-    cmp #'.'
-    beq @ZZ0014
+    lda     BUFNOM
+    cmp     #'.'
+    beq     @ZZ0014
 
-    lda BUFNOM+1
-    cmp #'.'
-    beq @ZZ0015
+    lda     BUFNOM+1
+    cmp     #'.'
+    beq     @ZZ0015
 
+<<<<<<< HEAD
 .ifndef LS_VERBOSE
     dec NUMBER_OF_COLUMNS
     bne @ZZ0016
@@ -411,6 +444,15 @@ display_catalog:
 
     lda #NUMBER_OF_COLUMNS_LS
     sta NUMBER_OF_COLUMNS
+=======
+    dec     ls_number_of_columns
+    bne     @ZZ0016
+
+    ; Attention XCRLF modifie RES
+    BRK_KERNEL XCRLF
+    lda     #NUMBER_OF_COLUMNS_LS
+    sta     ls_number_of_columns
+>>>>>>> origin/master
 
   @ZZ0016:
 
@@ -422,9 +464,14 @@ display_catalog:
 .endif
 
     ; PRINT BUFNOM
+<<<<<<< HEAD
 ;    ldy #$ff
     ldy #$00
     ldx #$00
+=======
+    ldy     #$FF
+    ldx     #$00
+>>>>>>> origin/master
 
     ; Affiche directement la couleur
     ; Ne doit pas être 0
@@ -433,14 +480,19 @@ display_catalog:
 
   @loop:
     iny
-    lda BUFNOM,y
-    beq @end
+    lda     BUFNOM,y
+    beq     @end
 
+<<<<<<< HEAD
     cmp #' '
     beq @loop
+=======
+    cmp     #' '
+    beq     @loop
+>>>>>>> origin/master
 
-    cpy #$09
-    bne @suite
+    cpy     #$09
+    bne     @suite
 
     pha
 ;    CPUTC '.'
@@ -457,21 +509,24 @@ display_catalog:
     adc     #'a'-'A'
 
   @skip:
-    BRK_TELEMON XWR0
+    BRK_KERNEL XWR0
     inx
-    bne @loop
+    bne     @loop
   @end:
 
-    ;ldy TEMP_ORIX_1
-
   @ZZ0017:
-    cpx #13
-    beq @ZZ0018
+    cpx     #13
+    beq     @ZZ0018
 
     inx
+<<<<<<< HEAD
 ;    CPUTC ' '
     print #' ', NOSAVE
     jmp @ZZ0017
+=======
+    CPUTC ' '
+    jmp     @ZZ0017
+>>>>>>> origin/master
 
   @ZZ0018:
 .ifdef LS_VERBOSE
@@ -509,13 +564,13 @@ display_catalog:
   @ZZ0015:
   @ZZ0014:
 
-    lda #CH376_FILE_ENUM_GO
-    sta CH376_COMMAND
-    jsr _ch376_wait_response
+    lda     #CH376_FILE_ENUM_GO
+    sta     CH376_COMMAND
+    jsr     _ch376_wait_response
     rts
 
 optstring:
-.BYT 'l',0
+.BYT     'l',0
 
 .endproc
 
@@ -536,60 +591,60 @@ optstring:
 ;
 ; ------------------------------------------------------------------------------
 .proc WildCard
-    lda #'?'
-    ldy #$0B-1
+    lda     #'?'
+    ldy     #$0B-1
 
   @loop:
-    sta (RESB),y
+    sta     (RESB),y
     dey
-    bpl @loop
+    bpl     @loop
 
 ; Pas de '.' renvoyé par le CH376
 ;    lda #'.'
 ;    ldy #$08
 ;    sta (RESB),y
 
-    lda #$00
-    ldy #$0C-1
-    sta (RESB),y
+    lda     #$00
+    ldy     #$0C-1
+    sta     (RESB),y
 
-    ldx #$00
-    ldy #$00
+    ldx     #$00
+    ldy     #$00
 
   Suivant:
-    lda (RES),y
-    beq ExtensionFill
+    lda     (RES),y
+    beq     ExtensionFill
 
-    cmp #'.'
-    beq Extension
+    cmp     #'.'
+    beq     Extension
 
 ;    cpx #$07
-    cpx #$08
-    beq Erreur3
+    cpx     #$08
+    beq     Erreur3
 
-    cmp #'?'
-    beq Question
+    cmp     #'?'
+    beq     Question
 
-    cmp #'*'
-    beq Star
+    cmp     #'*'
+    beq     Star
 
-    cmp #'0'
-    bcc Erreur
-    cmp #'9'+1
-    bcc Ok
+    cmp     #'0'
+    bcc     Erreur
+    cmp     #'9'+1
+    bcc     Ok
 
 ; Pour forcer le masque en majuscules
-    cmp #'A'
-    bcc Erreur
-    cmp #'Z'+1
-    bcc Ok
+    cmp     #'A'
+    bcc     Erreur
+    cmp     #'Z'+1
+    bcc     Ok
 
-    cmp #'a'
-    bcc Erreur
-    cmp #'z'+1
-    bcs Erreur
-    and #$DF
-    bne Ok
+    cmp     #'a'
+    bcc     Erreur
+    cmp     #'z'+1
+    bcs     Erreur
+    and     #$DF
+    bne     Ok
 
 ; Pour forcer le masque en minuscules
 ;    cmp #'z'+1
@@ -606,37 +661,37 @@ optstring:
 
 ; Ajoute le caractère au tampon
 Ok:
-    sta TR0
-    sty TR1
+    sta     TR0
+    sty     TR1
     txa
     tay
-    lda TR0
-    sta (RESB),y
-    ldy TR1
+    lda     TR0
+    sta     (RESB),y
+    ldy     TR1
 
 ; Incrémente les index
 ; Ajouter test X=09 -> erreur3?
 Question:
     inx
     iny
-    bne Suivant
-    beq Erreur2
+    bne     Suivant
+    beq     Erreur2
 
 ExtensionFill:
     ;Cas de la chaîne vide
-    cpx #$00
-    beq ExtensionFin
+    cpx     #$00
+    beq     ExtensionFin
 
     ; Complète l'extension avec des ' '
     txa
     tay
-    lda #' '
+    lda     #' '
   @loop:
-    cpy #$0c-1
-    beq ExtensionFin
-    sta (RESB),y
+    cpy     #$0C-1
+    beq     ExtensionFin
+    sta     (RESB),y
     iny
-    bne @loop
+    bne     @loop
 
 ExtensionFin:
     ; Place le '.' de séparation
@@ -645,20 +700,20 @@ ExtensionFin:
     ;sta (RESB),y
 
     ;Cherche si on a utilisé des wildcards
-    ldy #$0B-1
-    lda #'?'
+    ldy     #$0B-1
+    lda     #'?'
   @loop:
-    cmp (RESB),Y
-    beq @fin
+    cmp     (RESB),Y
+    beq     @fin
     dey
-    bpl @loop
+    bpl     @loop
     ; On peut supprimer le clc
     ; dans ce cas, il faudra tester Y=$FF ou Y+1=0 pour savoir
     ; si il y a des caractères '?'
     clc
 
   @fin:
-    lda #$00
+    lda     #$00
     ;tay
 
     rts
@@ -668,22 +723,22 @@ ExtensionFin:
 ; ------------------------------------------------------------------------------
 Erreur4:
     ; Extension trop longue
-    lda #$04
-    .byte $2c
+    lda     #$04
+    .byte     $2c
 
 Erreur3:
     ;Nom trop long
-    lda #$03
-    .byte $2c
+    lda     #$03
+    .byte     $2c
 
 Erreur2:
     ; Chaine RES trop longue
-    lda #$02
-    .byte $2c
+    lda     #$02
+    .byte   $2c
 
 Erreur:
     ; Caractère incorrect
-    lda #$01
+    lda     #$01
 
     ; ldy #$00
 
@@ -694,87 +749,87 @@ Erreur:
 ;
 ; ------------------------------------------------------------------------------
 Star:
-    ldx #$0c-1
+    ldx     #$0C-1
   @loop:
     iny
-    beq Erreur2
-    lda (RES),y
-    beq ExtensionFill
+    beq     Erreur2
+    lda     (RES),y
+    beq     ExtensionFill
 
-    cmp #'.'
-    bne @loop
-    ldx #$08-1
-    bne ExtensionQuestion
+    cmp     #'.'
+    bne     @loop
+    ldx     #$08-1
+    bne     ExtensionQuestion
 
 Extension:
-    cpx #$08
-    beq ExtensionQuestion
+    cpx     #$08
+    beq     ExtensionQuestion
 
-    sty TR1
+    sty     TR1
     txa
     tay
 
-    lda #' '
+    lda     #' '
   @loop:
-    sta (RESB),y
+    sta     (RESB),y
     iny
-    cpy #$08
-    bne @loop
+    cpy     #$08
+    bne     @loop
 
-    ldy TR1
-    ldx #$08-1
+    ldy     TR1
+    ldx     #$08-1
 
 ExtensionQuestion:
     inx
     iny
-    beq Erreur2
+    beq     Erreur2
 
-    lda (RES),y
-    beq ExtensionFill
+    lda     (RES),y
+    beq     ExtensionFill
 
-    cpx #$0C-1
-    beq Erreur4
+    cpx     #$0C-1
+    beq     Erreur4
 
-    cmp #'?'
-    beq ExtensionQuestion
+    cmp     #'?'
+    beq     ExtensionQuestion
 
-    cmp #'*'
-    beq ExtensionFin
+    cmp     #'*'
+    beq     ExtensionFin
 
-    cmp #'0'
-    bcc Erreur
-    cmp #'9'+1
-    bcc ExtensionOk
+    cmp     #'0'
+    bcc     Erreur
+    cmp     #'9'+1
+    bcc     ExtensionOk
 
 ; Pour forcer le masque en majuscules
-    cmp #'A'
-    bcc Erreur
-    cmp #'Z'+1
-    bcc ExtensionOk
+    cmp     #'A'
+    bcc     Erreur
+    cmp     #'Z'+1
+    bcc     ExtensionOk
 
-    cmp #'a'
-    bcc Erreur
-    cmp #'z'+1
-    bcs Erreur
-    and #$DF
+    cmp     #'a'
+    bcc     Erreur
+    cmp     #'z'+1
+    bcs     Erreur
+    and     #$DF
     ;bne Ok
 
 ExtensionOk:
-    sta TR0
-    sty TR1
+    sta     TR0
+    sty     TR1
     txa
     tay
-    lda TR0
-    sta (RESB),y
-    ldy TR1
-    bne ExtensionQuestion
+    lda     TR0
+    sta     (RESB),y
+    ldy     TR1
+    bne     ExtensionQuestion
 
 .endproc
 
 ; ------------------------------------------------------------------------------
 ;
 ; Entrée:
-;    TR2 : Chaine
+;    ls_save_line_command_ptr : Chaine
 ;    RESB: Masque
 ;
 ; Sortie:
@@ -783,26 +838,26 @@ ExtensionOk:
 ;    A: Dernier caractère testé (0 si fin du masque atteinte)
 ;
 ; Note: ne vérifie pas si la longueur de la chaîne est > à celle du masque
-;       - RES ne peut être utilisé à la place de TR2 (le XCRLF modifie RES)
+;       - RES ne peut être utilisé à la place de ls_save_line_command_ptr (le XCRLF modifie RES)
 ;
 ; ------------------------------------------------------------------------------
 .proc Match
-    ldy #$ff
+    ldy     #$FF
 
   @loop:
     iny
 
     ; Fin du masque?
-    lda (RESB),y
-    beq @fin
+    lda     (RESB),y
+    beq     @fin
 
     ; Caractères identiques?
-    cmp (TR2),y
-    beq @loop
+    cmp     (ls_save_line_command_ptr),y
+    beq     @loop
 
     ; Note: ls z?? affiche un fichier 'zx' si il existe
-    cmp #'?'
-    beq @loop
+    cmp     #'?'
+    beq     @loop
 
     ; Si on veut vérifier que la chaîne fait la même longueur que le masque
     ; (pas valable ici, les noms de fichiers sont complétés avec des ' ')

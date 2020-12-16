@@ -1,8 +1,13 @@
+.export _env
+
 .proc _env
     PRINT str_PATH
     BRK_ORIX XCRLF
     PRINT str_PWD
-    PRINT shell_bash_variables+shell_bash_struct::path_current
+    
+    BRK_KERNEL $48 ; XGETCWD
+    
+    BRK_KERNEL XWSTR0
     BRK_ORIX XCRLF
     rts
 str_PWD:

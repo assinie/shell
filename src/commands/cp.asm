@@ -2,22 +2,28 @@
 
 CP_SIZE_OF_BUFFER=40000
 
+cp_tmp := userzp+4
+
+.export _mv,_cp
+
 ;.proc
 .proc _mv
+  rts
   lda   #$01 ; don't Delete param1 file
-  sta   TEMP_ORIX_2
+  sta   cp_tmp
   jmp   _cp_mv_execute
 .endproc  
 
 .proc _cp
+  rts
   lda   #$00 ; don't Delete param1 file FIXME 65c02
-  sta   TEMP_ORIX_2
+  sta   cp_tmp
   jmp   _cp_mv_execute
 .endproc
 
 .proc _cp_mv_execute
-  ptr1:=userzp
-  MALLOC_PTR1:=userzp+2
+  ptr1         :=userzp
+  MALLOC_PTR1  :=userzp+2
   ;ptr2 will be used to save fp
   lda   #$00
   sta   ptr1_32         ; FIXME 65C02
@@ -38,7 +44,7 @@ CP_SIZE_OF_BUFFER=40000
   
   ldy   #O_RDONLY ; Open in readonly
   BRK_TELEMON XOPEN
-  cmp   #$ff
+  cmp   #$FF
   beq   no_such_file
 
   ; Let's copy
@@ -92,7 +98,7 @@ CP_SIZE_OF_BUFFER=40000
   ldx   #>ORIX_ARGV
   
   ldy   #O_WRONLY ; Open in readonly
-  BRK_TELEMON XOPEN
+  BRK_KERNEL XOPEN
  
   lda   MALLOC_PTR1
   sta   PTR_READ_DEST
@@ -102,19 +108,19 @@ CP_SIZE_OF_BUFFER=40000
   lda   ptr1
   ldy   ptr1+1
 ; reads byte 
-  BRK_TELEMON XFWRITE
+  BRK_KERNEL XFWRITE
 
-  BRK_TELEMON XCLOSE
+  BRK_KERNEL XCLOSE
   ; and we write the file
   
-  lda   TEMP_ORIX_2
+  lda   cp_tmp
   beq   @out
   
   ldx   #$01
   jsr   _orix_get_opt
   lda   #<ORIX_ARGV
   ldx   #>ORIX_ARGV
-  BRK_TELEMON XRM
+  BRK_KERNEL XRM
   ; now remove file
 
 @out:
@@ -133,13 +139,12 @@ no_such_file:
  
   PRINT ORIX_ARGV
   lda     #$27
-  BRK_TELEMON XWR0
+  BRK_KERNEL XWR0
   
   PRINT   str_not_found
   rts
 str_cannot_stat:
   .asciiz   "cannot stat "
-str_oom:
-  .byte     "Out of memory",$0D,$0A,0 ; FIXME
+
 .endproc
 

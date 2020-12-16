@@ -1,50 +1,3 @@
-
-WITH_BANK=1
-WITH_BASIC11=1
-WITH_CAT=1
-WITH_CD=1
-WITH_CLEAR=1
-WITH_CP=1
-WITH_DATE=1
-WITH_DF=1
-WITH_DEBUG=1
-WITH_ECHO=1
-WITH_ENV=1
-WITH_EXEC=1
-WITH_FORTH=1
-WITH_HELP=1
-WITH_HISTORY=1
-WITH_IOPORT=1
-WITH_KILL=1
-WITH_LESS=1
-WITH_LS=1
-WITH_LSCPU=1
-WITH_LSMEM=1
-WITH_LSOF=1
-WITH_MAN=1
-WITH_MEMINFO=1
-WITH_MOUNT=1
-WITH_MV=1
-WITH_MKDIR=1
-WITH_MONITOR=1
-;WITH_OCONFIG=1
-WITH_PS=1
-WITH_PSTREE=1
-WITH_PWD=1
-WITH_REBOOT=1
-WITH_RM=1
-;WITH_SEDORIC=1
-WITH_SH=1
-WITH_TOUCH=1
-WITH_TELNETD=1
-WITH_UNAME=1
-WITH_VI=1
-WITH_VIEWHRS=1
-WITH_WATCH=1
-WITH_XORIX=1
-WITH_TREE=1
-
-
 NULL                          =  $00
 XDIVIDE_INTEGER32_BY_1024     =  $1E
 
@@ -56,135 +9,27 @@ ptr1_32                       := $33
 
 ATMOS_ID_BANK                 = 6
 ORIX_ID_BANK                  = 5
-MONITOR_ID_BANK               = 4
-TELEFORTH_ID_BANK     	      = 3
 
-
-ORIX_MAX_OPEN_FILES           = 2
-SIZE_OF_VOLATILE_STR          = 50      ; can't be below 20 because it's used to load Orix header
-
-
-SIZE_OF_STACK_BANK            =  1
-
-XOPENRELATIVE                 = $31
-
-NEXT_STACK_BANK               :=$418
-
-
-.org $4c7
+.org $4C7
 .bss
 ;*=end_of_copy_page4-begin_of_copy_page4
-FIXME_DUNNO:
-    .res 1
-STACK_BANK:
-    .res SIZE_OF_STACK_BANK
+;FIXME_DUNNO:
+    ;.res 2
 READ_BYTE_FROM_OVERLAY_RAM:
     .res 1
 
 ; 6522
-.org $500
-.bss
-NUMBER_OPENED_FILES: ; ALIAS but in stratsed it's $549
-    .res 1
-TEMP_ORIX_2:
-    .res 1
-NUMBER_OF_COLUMNS:
-    .res 1
-GETOPT_PTR:
-    .res 1 ; Store the index of the current opt
+
+.org BUFEDT
+.res 110
+ORIX_ARGV:
+	.res    MAX_LENGTH_OF_FILES*BASH_MAX_ARGS
 TEMP_ORIX_1:
     .res 1
 ORIX_ARGC:
     .res 1
-ORIX_GETOPT_PTR:
-    .res 1
-ORIX_PATH_CURRENT_POSITION:
-    .res 1
-ORIX_CURRENT_PROCESS_MULTITASKING:
-    .res 1
-ERRNO:
-    .res 1
-TERM:
-    .res 1
-TEMP_SH_COMMAND: ; For sh command only
-    .res 2
-ORIX_CURRENT_PROCESS_FOREGROUND:
-    .res 1
-MEMTOTAL:
-    .res 4 ; Store the length of the RAM in bytes
-
-.org BUFNOM+14
-.bss
-ORIX_PATH_CURRENT:
-    .res ORIX_MAX_PATH_LENGTH,0
-
-ORIX_MALLOC_FREE_TABLE:
-; (adress begin) (adress_end) (size of chunk 16 bit)
-ORIX_MALLOC_FREE_BEGIN_LOW_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-ORIX_MALLOC_FREE_BEGIN_HIGH_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-
-ORIX_MALLOC_FREE_END_LOW_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-ORIX_MALLOC_FREE_END_HIGH_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-
-MEMFREE:
-ORIX_MALLOC_FREE_SIZE_LOW_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-ORIX_MALLOC_FREE_SIZE_HIGH_TABLE:
-    .res ORIX_MALLOC_FREE_FRAGMENT_MAX
-    .res 2 ; For 32 bits management
-
-ORIX_MALLOC_FREE_TABLE_NUMBER:
-; it contains the number of free chuncks
-    .res 1
-
-; Busy table
-ORIX_MALLOC_BUSY_TABLE:
-ORIX_MALLOC_BUSY_TABLE_BEGIN_LOW:
-    .res ORIX_NUMBER_OF_MALLOC
-ORIX_MALLOC_BUSY_TABLE_BEGIN_HIGH:
-    .res ORIX_NUMBER_OF_MALLOC
-ORIX_MALLOC_BUSY_TABLE_END_LOW:
-    .res ORIX_NUMBER_OF_MALLOC
-ORIX_MALLOC_BUSY_TABLE_END_HIGH:
-    .res ORIX_NUMBER_OF_MALLOC
-ORIX_MALLOC_BUSY_TABLE_SIZE_LOW:
-    .res ORIX_NUMBER_OF_MALLOC
-ORIX_MALLOC_BUSY_TABLE_SIZE_HIGH:
-    .res ORIX_NUMBER_OF_MALLOC
-
-; We store the PID of the malloc
-ORIX_MALLOC_BUSY_TABLE_PID:
-    .res ORIX_NUMBER_OF_MALLOC
-
-ORIX_MALLOC_BUSY_TABLE_NUMBER:
-    .res 1
-
-.org BUFEDT+BASH_MAX_BUFEDT_LENGTH
-.bss
-ORIX_ARGV_NAME:
-    .res    MAX_LENGTH_OF_FILES  ; name
-ORIX_ARGV:
-	.res    MAX_LENGTH_OF_FILES*BASH_MAX_ARGS
-; used to check term
-
-
-volatile_str:
-    .res SIZE_OF_VOLATILE_STR
-
-LIST_PID:
-    .res ORIX_MAX_PROCESS
-LIST_NAME_PID:
-    .res 9*ORIX_MAX_PROCESS
-
-shell_bash_variables:
-    .tag shell_bash_struct    
-; ptr of LIST_NAME_PID
-orix_end_memory_kernel:
-    .res 1
+.out     .sprintf("ORIX_ARGV  : %x", ORIX_ARGV)
+.out     .sprintf("ORIX_ARGC  : %x", ORIX_ARGC)
 
 .macro  BRK_ORIX   value
 	.byte $00,value
@@ -192,19 +37,19 @@ orix_end_memory_kernel:
  
 .macro RETURNVAL value
   lda #value
-  sta ERRNO
+  sta KERNEL_ERRNO
 .endmacro
   
 .macro RETURN0
     lda #$00
-    sta ERRNO  
+    sta KERNEL_ERRNO  
 .endmacro
 
 .macro PRINT_BINARY_TO_DECIMAL_16BITS justif
     LDX #$20
     STX DEFAFF
     LDX #justif
-    BRK_ORIX XDECIM
+    BRK_KERNEL XDECIM
     ;.byte $00,XDECIM
 .endmacro
 
@@ -216,34 +61,23 @@ orix_end_memory_kernel:
   ldy     #<(SCREEN+40+27*40)
   ldx     #>(SCREEN+40+27*40)
   lda     #' '
-  BRK_ORIX XFILLM
+  BRK_KERNEL XFILLM
 .endmacro
    
 .macro SWITCH_ON_CURSOR
   ldx #$00
-  BRK_ORIX XCSSCR
+  BRK_KERNEL XCSSCR
 .endmacro  
 
 .macro SWITCH_OFF_CURSOR
 	ldx #$00
-	BRK_ORIX XCOSCR
+	BRK_KERNEL XCOSCR
 .endmacro    
 
 .macro HIRES
-	BRK_ORIX XHIRES
+	BRK_KERNEL XHIRES
 .endmacro    
 
-;FIXME   
-.macro GET8_FROM_STRUCT offset, zpaddress
-	ldy #offset
-	lda (zpaddress),y
-.endmacro    
-
-.macro PUT8_FROM_STRUCT offset,zpaddress
-	ldy #offset
-	sta (zpaddress),y
-.endmacro    
-  
 ; O_WRONLY
 ; O_RDONLY   
 .macro FOPEN file, mode
@@ -253,13 +87,7 @@ orix_end_memory_kernel:
   .byte $00,XOPEN
 .endmacro  
  
-.macro FOPEN_INTO_BANK7 file, mode
-  lda   #<file
-  ldx   #>file
-  ldy   #mode
-  jsr   XOPEN_ROUTINE
-.endmacro
- 
+
 .macro MKDIR PATH 
   lda   #<PATH
   ldx   #>PATH
@@ -276,13 +104,13 @@ orix_end_memory_kernel:
     sta PTR_READ_DEST+1
     lda #<size
     ldy #>size
-    BRK_ORIX XFREAD
+    BRK_KERNEL XFREAD
 .endmacro
 
 ; This macro must be placed after MALLOC call
 .macro TEST_OOM_AND_MAX_MALLOC
     ; Test if we reached the max number of malloc chunk
-    cpx     #ORIX_NUMBER_OF_MALLOC
+    cpx     #KERNEL_MAX_NUMBER_OF_MALLOC
     bne     @check_for_oom_TEST_OOM_AND_MAX_MALLOC
     ; We reachead max malloc available
     PRINT   str_max_malloc_reached
@@ -302,24 +130,18 @@ orix_end_memory_kernel:
 .endmacro
 
 .macro  CGETC
-    BRK_ORIX XRDW0 
+    BRK_KERNEL XRDW0 
 .endmacro    
     
 .macro MALLOC size 
   lda #<size
   ldy #>size
-  BRK_ORIX XMALLOC
+  BRK_KERNEL XMALLOC
 .endmacro
-
-.macro FREE ptr 
-  lda #<ptr
-  ldy #>ptr
-  BRK_ORIX XFREE
-.endmacro 
 
 .macro CPUTC char
   lda #char
-  BRK_ORIX XWR0
+  BRK_KERNEL XWR0
 .endmacro
   
 .macro  PRINT_CHAR str
@@ -357,7 +179,7 @@ orix_end_memory_kernel:
 .macro PRINT_NOSAVE_REGISTER str
 	lda #<str
 	ldy #>str
-	BRK_TELEMON XWSTR0
+	BRK_KERNEL XWSTR0
 .endmacro
 
 .macro RETURN_LINE_INTO_TELEMON
@@ -407,7 +229,7 @@ orix_end_memory_kernel:
 .endmacro
 
 .macro RETURN_LINE
-  BRK_ORIX XCRLF
+  BRK_KERNEL XCRLF
 .endmacro  
 	
 .macro STRCPY str1, str2
@@ -471,11 +293,6 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     CLEAR=0
 .endif
 
-.ifdef WITH_CD
-    CD=1
-.else
-    CD=0
-.endif
 
 .ifdef WITH_CP
     CP=1
@@ -501,11 +318,7 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     DF=0
 .endif
 
-.ifdef WITH_ECHO
-    ECHO=1
-.else
-    ECHO=0
-.endif
+
 
 .ifdef WITH_ENV
     ENV=1
@@ -513,17 +326,8 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     ENV=0
 .endif
 
-.ifdef WITH_EXEC
-    EXEC=1
-.else
-    EXEC=0
-.endif
 
-.ifdef WITH_HELP
-    HELP=1
-.else
-    HELP=0
-.endif
+
 
 .ifdef WITH_IOPORT
     IOPORT=1
@@ -609,6 +413,12 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     OCONFIG=0
 .endif
 
+.ifdef WITH_ORICSOFT
+    ORICSOFT=1
+.else
+    ORICSOFT=0
+.endif
+
 .ifdef WITH_PS
     PS=1
 .else
@@ -619,12 +429,6 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     PSTREE=1
 .else
     PSTREE=0
-.endif
-
-.ifdef WITH_PWD
-    PWD=1
-.else
-    PWD=0
 .endif
 
 .ifdef WITH_RM
@@ -681,6 +485,12 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
     SH=0
 .endif
 
+.ifdef WITH_SETFONT
+    SETFONT=1
+.else
+    SETFONT=0
+.endif
+
 .ifdef WITH_MORE
     MORE=1
 .else
@@ -728,8 +538,14 @@ BASIC11_IRQ_VECTOR_ROM=$EE22
 .else
     FORTH=0
 .endif
-;OCONFIG+LSOF+DF+VI+TREE+SH+MORE+LESS+SEDSD+CPUINFO+BANK+KILL+HISTORY+XORIX+MOUNT+MONITOR+CA65+TELEFORTH
-BASH_NUMBER_OF_COMMANDS=1+BASIC11+CD+CP+CAT+CLEAR+DEBUG+DF+DATE+ECHO+ENV+EXEC+FORTH+HELP+HISTORY+IOPORT+KILL+LESS+LS+BANK+LSCPU+LSOF+LSMEM+MAN+MOUNT+MEMINFO+MKDIR_COMMAND+MONITOR+MV+PS+PSTREE+PWD+REBOOT+RM+SH+UNAME+VI+VIEWHRS+TELNETD+TOUCH+TREE+WATCH+XORIX
+
+.ifdef WITH_TWILIGHT
+    TWILIGHT=1
+.else
+    TWILIGHT=0
+.endif
+
+BASH_NUMBER_OF_COMMANDS=BASIC11+CP+CAT+CLEAR+DEBUG+DF+DATE+ENV+FORTH+HISTORY+IOPORT+KILL+LESS+LS+BANK+LSCPU+LSOF+LSMEM+MAN+MOUNT+MEMINFO+MKDIR_COMMAND+MV+ORICSOFT+PS+PSTREE+REBOOT+RM+SETFONT+SH+UNAME+VI+VIEWHRS+TELNETD+TOUCH+TWILIGHT+TREE+WATCH+XORIX
 
 COLOR_FOR_FILES =             $87 ; colors when ls displays files 
 COLOR_FOR_DIRECTORY  =        $86 ; colors when ls display directory
