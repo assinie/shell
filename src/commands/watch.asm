@@ -1,10 +1,23 @@
+.export _watch
+
 save_mainargs_ptr:=userzp
 
 
 .proc _watch
+    ldx     #$01
+    jsr     _orix_get_opt
+    bcc     @usage
+@L1: 
+    lda     #<ORIX_ARGV
+    ldy     #>ORIX_ARGV
+
+    BRK_KERNEL XEXEC
+    jmp     @L1
+
+@usage:    
+    rts
     PRINT   str_argc
-    lda     #<BUFEDT
-    ldy     #>BUFEDT
+
     BRK_KERNEL $2C ; XMAINARGS
     ; Return in A & Y struct
     ; save ptr

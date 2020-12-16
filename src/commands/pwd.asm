@@ -1,5 +1,8 @@
+.export _pwd
+
 .proc _pwd
-    PRINT shell_bash_variables+shell_bash_struct::path_current
-    BRK_ORIX XCRLF
+    BRK_KERNEL XGETCWD
+    BRK_KERNEL XWSTR0
+    BRK_KERNEL XCRLF
     rts
 .endproc

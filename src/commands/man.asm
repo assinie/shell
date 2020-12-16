@@ -1,21 +1,26 @@
+.export _man
+
+; TODO : move MALLOC macro after arg test : it avoid a malloc if there is no parameter on command line
+
 .proc _man
-    MAN_SAVE_MALLOC_PTR:=VARLNG
-    MAN_SAVE_MALLOC_FP :=VARLNG+2
-    ;
-    MALLOC  .strlen("/usr/share/man/")+FNAME_LEN+1+1              ; length of /usr/share/man/ + 8 + .hlp + \0
+    MAN_SAVE_MALLOC_PTR:=userzp
+    MAN_SAVE_MALLOC_FP :=userzp+2
+    ; 
+    MALLOC  (.strlen("/usr/share/man/")+FNAME_LEN+1+4)             ; length of /usr/share/man/ + 8 + .hlp + \0
     ; FIXME test OOM
     TEST_OOM_AND_MAX_MALLOC
-   
+
 start_man:   
     sta     MAN_SAVE_MALLOC_PTR
     sta     RESB
     sty     MAN_SAVE_MALLOC_PTR+1
     sty     RESB+1
+
     lda     #<man_path
     sta     RES
     lda     #>man_path
     sta     RES+1
-    jsr     _strcpy             ; MAN_SAVE_MALLOC_PTR contains adress of a new string
+    jsr     _strcpy               ; MAN_SAVE_MALLOC_PTR contains adress of a new string
  
     ; get the first parameter
     ldx     #$01
@@ -34,7 +39,6 @@ start_man:
     lda     MAN_SAVE_MALLOC_PTR+1
     sta     RES+1
     jsr     _strcat
-
     
     lda     #<str_man_hlp
     sta     RESB
@@ -46,45 +50,47 @@ start_man:
     lda     MAN_SAVE_MALLOC_PTR+1
     sta     RES+1
     jsr     _strcat
-
+ 
     lda     MAN_SAVE_MALLOC_PTR
     ldx     MAN_SAVE_MALLOC_PTR+1
-    ldy     #O_RDONLY
-    BRK_ORIX XOPEN
-    sta     MAN_SAVE_MALLOC_FP
     
-    cpx     #$FF
+    ldy     #O_RDONLY
+    BRK_KERNEL XOPEN
+
+    cmp     #NULL
     bne     next
-    cmp     #$FF
+    cpy     #NULL
     bne     next
-    beq     not_found
-    rts
-error:
-    PRINT   str_man_error
-    rts
-not_found:
+
+
+    ; Not found
+    ; Free memory for path
+    lda     MAN_SAVE_MALLOC_PTR
+    ldy     MAN_SAVE_MALLOC_PTR+1
+    BRK_KERNEL XFREE
+
     PRINT   txt_file_not_found
     ldx     #$01
     jsr     _orix_get_opt
     PRINT   BUFNOM
     RETURN_LINE
-    rts 
+
+    rts
+error:
+    ; Free memory for path
+    lda     MAN_SAVE_MALLOC_PTR
+    ldy     MAN_SAVE_MALLOC_PTR+1
+    BRK_ORIX XFREE
+    PRINT   str_man_error
+    rts
+
 next:
+    sta     MAN_SAVE_MALLOC_FP
+    sty     MAN_SAVE_MALLOC_FP+1
     CLS
     SWITCH_OFF_CURSOR
-    ; now we read
-    lda     #$01 ; 1 is the fd id of the file opened
-    sta     TR0
-  ; define target address
-    lda     #<SCREEN
-    sta     PTR_READ_DEST
-    lda     #>SCREEN
-    sta     PTR_READ_DEST+1
   ; We read 1080 bytes
-    lda     #<1080      ; FIXME  size from parameters
-    ldy     #>1080
-  ; reads byte 
-    BRK_ORIX  XFREAD
+    FREAD   SCREEN, 1080, 1, 0
     BRK_ORIX  XCLOSE
 cget_loop:
     BRK_ORIX  XRDW0
@@ -96,7 +102,14 @@ out:
     
     SWITCH_ON_CURSOR
 
-    FREE MAN_SAVE_MALLOC_PTR
+    lda MAN_SAVE_MALLOC_PTR
+    ldy MAN_SAVE_MALLOC_PTR+1
+    BRK_ORIX XFREE
+
+    lda MAN_SAVE_MALLOC_FP
+    ldy MAN_SAVE_MALLOC_FP+1
+    BRK_ORIX XFREE
+
     rts
 
 str_man_error:

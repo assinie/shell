@@ -118,11 +118,11 @@ CH376_ERR_FILE_CLOSE 	= $B4
     lda     #CH376_DISK_CAPACITY
     sta     CH376_COMMAND
     jsr     _ch376_wait_response
-
+    
     lda     #CH376_RD_USB_DATA0
     sta     CH376_COMMAND
-
-    lda     CH376_DATA ; Number of bytes (4)
+    
+    lda     CH376_DATA
 
     lda     CH376_DATA ; total sector0
     sta     TR0 ; $5F
@@ -309,6 +309,8 @@ _ch376_set_bytes_write:
     ; if we read data value, we have then length of the volume name
     rts
 .endproc
+
+
 
 .proc _ch376_wait_response
 
